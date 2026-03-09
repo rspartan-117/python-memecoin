@@ -201,13 +201,7 @@ async def chat(request: MessageRequest):
             had_error = False
 
             try:
-                # Accumulate token usage across ALL AI calls in this turn.
-                # A single agent turn involves multiple LLM calls (tool-calling loop).
-                # Previously only the LAST call's usage_metadata was captured,
-                # causing all intermediate calls to go uncharged.
-                cumulative_input_tokens = 0
-                cumulative_output_tokens = 0
-                cumulative_total_tokens = 0
+                usage_metadata = {}
                 model_provider = None
                 model_name = None
 
@@ -283,15 +277,11 @@ async def chat(request: MessageRequest):
                                 last_message = messages[-1]
 
                                 # Extract usage metadata from AI messages
-                                # Accumulate across ALL calls (not just the last one)
                                 if (
                                     hasattr(last_message, "usage_metadata")
                                     and last_message.usage_metadata
                                 ):
-                                    meta = last_message.usage_metadata
-                                    cumulative_input_tokens += meta.get("input_tokens", 0)
-                                    cumulative_output_tokens += meta.get("output_tokens", 0)
-                                    cumulative_total_tokens += meta.get("total_tokens", 0)
+                                    usage_metadata = last_message.usage_metadata
 
                                 # Check for tool calls
                                 if (
@@ -407,19 +397,13 @@ async def chat(request: MessageRequest):
                 except Exception as e:
                     logger.warning(f"Failed to get final token usage: {e}")
 
-                # Send completion event with CUMULATIVE token usage
-                cumulative_usage = {
-                    "input_tokens": cumulative_input_tokens,
-                    "output_tokens": cumulative_output_tokens,
-                    "total_tokens": cumulative_total_tokens,
-                }
-
+                # Send completion event
                 yield format_sse_event(
                     "agent_complete",
                     {
                         "timestamp": datetime.now().isoformat(),
                         "project_id": request.project_id,
-                        "usage_metadata": cumulative_usage,
+                        "usage_metadata": usage_metadata,
                         "token_summary": final_tokens,  # Include token summary
                         "model_provider": model_provider,
                         "model_name": model_name,

@@ -33,5 +33,5 @@ RUN uv sync --locked --no-dev --no-editable
 # Expose port
 EXPOSE 8000
 
-# Run the application with uvicorn
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application with uvicorn (production: no reload, direct app reference)
+CMD ["uv", "run", "uvicorn", "api.agent_api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]

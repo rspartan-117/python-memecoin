@@ -10,6 +10,7 @@ This module provides API endpoints for managing E2B sandbox sessions:
 
 import asyncio
 import logging
+import os
 from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
@@ -318,56 +319,51 @@ async def get_or_create_session(request: CreateSandboxSessionRequest):
         )
 
         # =====================================================================
-        # TODO: REMOVE AFTER TESTING - Temporary project creation for Python-only testing
-        # =====================================================================
+        # DEV ONLY: Temporary project creation for Python-only testing
         # In production, NestJS backend creates projects in DB before calling Python.
-        # This temporary code allows direct Python testing without NestJS.
-        # Remove this block once NestJS integration is complete!
         # =====================================================================
-        try:
-            async with get_db_session() as session:
-                project_repo = ProjectRepository(session)
+        env = os.getenv("ENV", "development").lower()
+        if env == "development":
+            try:
+                async with get_db_session() as session:
+                    project_repo = ProjectRepository(session)
 
-                # Check if project exists
-                existing_project = await project_repo.get_project(request.project_id)
+                    # Check if project exists
+                    existing_project = await project_repo.get_project(request.project_id)
 
-                if not existing_project:
-                    # Create project in DB (temporary for testing)
-                    logger.warning(
-                        f"[TEMP] Creating project in DB for testing: {request.project_id}. "
-                        f"In production, NestJS should create this!"
-                    )
+                    if not existing_project:
+                        # Create project in DB (dev-only fallback)
+                        logger.warning(
+                            f"[DEV] Creating project in DB for testing: {request.project_id}. "
+                            f"In production, NestJS should create this!"
+                        )
 
-                    new_project = Project(
-                        id=request.project_id,
-                        userId=request.user_id,
-                        name=f"Test Project {request.project_id[:8]}",  # Temporary name
-                        sandbox_state=SandboxState.NONE,
-                        status="ACTIVE",  # SessionStatus ENUM
-                        type="FULLSTACK",  # ProjectType ENUM (default)
-                        created_at=datetime.now(),
-                        updated_at=datetime.now(),
-                        last_active=datetime.now(),
-                    )
+                        new_project = Project(
+                            id=request.project_id,
+                            user_id=request.user_id,
+                            name=f"Test Project {request.project_id[:8]}",
+                            sandbox_state=SandboxState.NONE,
+                            status="ACTIVE",
+                            type="FULLSTACK",
+                            created_at=datetime.now(),
+                            updated_at=datetime.now(),
+                            last_active=datetime.now(),
+                        )
 
-                    session.add(new_project)
-                    await session.commit()
+                        session.add(new_project)
+                        await session.commit()
 
-                    logger.info(
-                        f"[TEMP] Created project {request.project_id} in DB for testing"
-                    )
-                else:
-                    logger.debug(f"Project {request.project_id} already exists in DB")
+                        logger.info(
+                            f"[DEV] Created project {request.project_id} in DB for testing"
+                        )
+                    else:
+                        logger.debug(f"Project {request.project_id} already exists in DB")
 
-        except Exception as e:
-            # Log error but don't fail the request
-            # The sandbox_manager will handle missing DB records gracefully
-            logger.warning(
-                f"[TEMP] Failed to create project in DB: {e}. "
-                f"Continuing with sandbox creation (manager handles missing DB records)."
-            )
-        # =====================================================================
-        # END TODO - REMOVE AFTER TESTING
+            except Exception as e:
+                logger.warning(
+                    f"[DEV] Failed to create project in DB: {e}. "
+                    f"Continuing with sandbox creation (manager handles missing DB records)."
+                )
         # =====================================================================
 
         # Get or create sandbox (this handles Redis caching internally)

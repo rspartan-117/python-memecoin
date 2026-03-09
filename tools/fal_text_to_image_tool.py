@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 @tool
 async def generate_image_text_to_image(
     prompt: str,
-    model: str = "fal-ai/flux/schnell",
+    model: str = "fal-ai/flux-2/dev",
     image_size: str = "landscape_4_3",
     num_images: int = 1,
     enable_safety_checker: bool = True,

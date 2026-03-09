@@ -8,6 +8,7 @@ Production Redis client for sandbox ID caching.
 """
 
 import os
+import ssl
 import logging
 from typing import Optional
 import threading
@@ -66,12 +67,17 @@ class RedisClient:
             with cls._lock:
                 # Double-check locking pattern
                 if cls._instance is None:
-                    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+                    redis_host = os.getenv("REDIS_HOST_ADDRESS", "localhost")
+                    redis_port = int(os.getenv("REDIS_PORT", "6379"))
+                    redis_password = os.getenv("REDIS_PASSWORD", None)
+                    redis_ssl = os.getenv("REDIS_SSL", "true").lower() in ("true", "1", "yes")
 
                     try:
-                        # Create connection pool (best practice)
-                        cls._pool = ConnectionPool.from_url(
-                            redis_url,
+                        # Build connection kwargs
+                        pool_kwargs = dict(
+                            host=redis_host,
+                            port=redis_port,
+                            password=redis_password,
                             decode_responses=True,
                             max_connections=10,  # Pool size
                             socket_connect_timeout=5,
@@ -84,6 +90,15 @@ class RedisClient:
                             health_check_interval=30,  # Check connection health
                         )
 
+                        # Enable SSL/TLS if configured (required by ScaleGrid)
+                        if redis_ssl:
+                            pool_kwargs["connection_class"] = redis.connection.SSLConnection
+                            pool_kwargs["ssl_cert_reqs"] = ssl.CERT_NONE  # Accept self-signed certs
+                            logger.info(f"Redis SSL/TLS enabled")
+
+                        # Create connection pool (best practice)
+                        cls._pool = ConnectionPool(**pool_kwargs)
+
                         # Create Redis client with connection pool
                         cls._instance = redis.Redis(
                             connection_pool=cls._pool,
@@ -93,7 +108,7 @@ class RedisClient:
 
                         # Test connection
                         cls._instance.ping()
-                        logger.info(f"Redis connected: {redis_url}")
+                        logger.info(f"Redis connected: {redis_host}:{redis_port}")
                         logger.info(
                             f"   Connection pool: max={cls._pool.max_connections}"
                         )
